@@ -1,0 +1,74 @@
+https://blog.logrocket.com/improve-microservice-architecture-graphql-api-gateways/
+
+We now need an API gateway service that will be responsible for receiving operations and returning data from both new and legacy services. We can do this in two different ways: schema stitching or federation.
+
+
+API Gateway using Graphql:
+https://tkssharma.com/build-api-gateway-using-graphql/
+
+
+Convert the REST API to graphql API: (Very useful)
+https://www.cloudbees.com/blog/graphql-as-an-api-gateway-to-micro-services
+
+
+Using separate API for Mobile APP client and Website client, so can use only one graphQL
+
+
+
+Client consume REST APIs but it convert to GraphQL query: This example uses graphql federation to work as Gateway
+https://www.krakend.io/docs/backends/graphql/
+
+
+Migrating Existing REST APIs to GraphQL: (very useful)
+https://blog.bitsrc.io/migrating-existing-rest-apis-to-graphql-2c5de3db647d
+
+
+Monitor APIs health check:
+https://opensource.com/article/20/8/microservices-graphql
+
+
+Call POST by using 'fetch' in graphql:
+https://grafbase.com/guides/using-fetch-as-your-graphql-client
+
+https://hasura.io/blog/how-to-request-a-graphql-api-with-fetch-or-axios/
+https://atheros.ai/blog/using-fetch-api-for-executing-graphql-queries-and-mutations
+	
+query GetBooks {
+  books {
+    title
+    author
+  }
+}
+
+
+
+Build REST project using NodeJS:
+https://medium.com/@onejohi/building-a-simple-rest-api-with-nodejs-and-express-da6273ed7ca9
+https://levelup.gitconnected.com/creating-a-rest-api-with-node-js-and-express-a-step-by-step-guide-3bd7188fa219
+
+
+Build Secure REST API:
+https://hevodata.com/learn/building-a-secure-node-js-rest-api/
+https://auth0.com/blog/node-js-and-express-tutorial-building-and-securing-restful-apis/
+
+
+
+My local:
+http://localhost:3000/ads
+
+---------------------------------------------------------------------------------------------------------
+
+https://manage.auth0.com/welcome/
+Tenant Domain:
+dev-pbjqc3p01v0614fs.auth0.com
+https://manage.auth0.com/dashboard/us/dev-pbjqc3p01v0614fs/apis/64552891d58a6ace99e76445/quickstart
+
+-----------------------------------------------------------------------------------------------------------
+
+The error: jwt is not a function. then run these commands:
+npm uninstall express-jwt  and install again  npm i express-jwt@5.3.1
+https://copyprogramming.com/howto/typeerror-expressjwt-is-not-a-function
+
+
+
+eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IlRXOHUtMkFnSnl1UHZacVFiZ3FXXyJ9
