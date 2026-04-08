@@ -16,9 +16,10 @@ class RagServiceTest {
     private final EmbeddingClient embeddingClient = Mockito.mock(EmbeddingClient.class);
     private final VectorStoreClient vectorStoreClient = Mockito.mock(VectorStoreClient.class);
     private final RerankerClient rerankerClient = Mockito.mock(RerankerClient.class);
+    private final HybridSearchService hybridSearchService = Mockito.mock(HybridSearchService.class);
 
     private final RagService ragService =
-            new RagService(embeddingClient, vectorStoreClient, rerankerClient);
+            new RagService(embeddingClient, vectorStoreClient, rerankerClient, hybridSearchService);
 
     @Test
     void shouldRetrieveAndRerankContext() {

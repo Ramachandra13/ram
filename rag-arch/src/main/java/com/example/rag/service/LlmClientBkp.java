@@ -1,17 +1,18 @@
 package com.example.rag.service;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -22,10 +23,10 @@ import com.example.rag.model.DocumentChunk;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Component
-public class LlmClient {
+public class LlmClientBkp {
 
     private static final Logger log =
-            LoggerFactory.getLogger(LlmClient.class);
+            LoggerFactory.getLogger(LlmClientBkp.class);
 
     private static final int MAX_CHARS = 3000;
 
@@ -153,12 +154,18 @@ public class LlmClient {
         String systemPrompt = buildSystemPrompt();
         String contextBlock = buildContextBlock(context);
 
+        log.info(
+                "streamAnswer:: LLM prompt size = {} chars",
+                (systemPrompt + contextBlock + question).length()
+        );
+
+
         Map<String, Object> body = Map.of(
                 "model", model,
                 "stream", true,
                 "temperature", 0.2,
-                "num_ctx", 8192,
-                "num_predict", 512,
+                "num_ctx", 4096,
+                "num_predict", 256,
                 "messages", List.of(
                         Map.of("role", "system", "content", systemPrompt),
                         Map.of(
@@ -168,75 +175,52 @@ public class LlmClient {
                 )
         );
 
-        try {
-            StringBuilder fullAnswer = new StringBuilder();
+        log.info("LLM request params → num_predict={}, num_ctx={}, temperature={}",
+                256, 4096, 0.2);
 
-            restTemplate.execute(
-                    llmUrl + "/v1/chat/completions",
-                    HttpMethod.POST,
+        try{
 
-                    request -> {
-                        request.getHeaders()
-                                .setContentType(MediaType.APPLICATION_JSON);
-                        objectMapper.writeValue(request.getBody(), body);
-                    },
-
-                    response -> {
-                        try (BufferedReader reader =
-                                     new BufferedReader(
-                                             new InputStreamReader(response.getBody())
-                                     )) {
-
-                            String line;
-                            while ((line = reader.readLine()) != null) {
-
-                                // Ignore empty / non-data lines
-                                if (!line.startsWith("data:")) {
-                                    continue;
-                                }
-
-                                // END OF STREAM
-                                if (line.contains("[DONE]")) {
-                                    // to accumulate all tokens to show uo complete answer at client
-                                    // Actually this job is done at Client side
-                                    emitter.send(
-                                            SseEmitter.event()
-                                                    .name("answer")
-                                                    .data(fullAnswer.toString())
-                                    );
-
-                                    emitter.send(
-                                            SseEmitter.event()
-                                                    .name("final")
-                                                    .data("DONE")
-                                    );
-
-                                    emitter.complete();
-                                    return null;
-                                }
-
-                                String token = extractToken(line);
-
-                                if (!token.isEmpty()) {
-                                    fullAnswer.append(token);   // to accumulate all tokens to show uo complete answer at client
-                                    emitter.send(
-                                            SseEmitter.event()
-                                                    .name("token")
-                                                    .data(token)
-                                    );
-                                }
-                            }
-                            // Safety net if DONE never arrives
-                            emitter.complete();
-                        } catch (Exception e) {
-                            emitter.completeWithError(e);
-                        }
-                        return null;
-                    }
-            );
         } catch (Exception e) {
-            emitter.completeWithError(e);
+            throw new RuntimeException(e);
         }
+        restTemplate.execute(
+                llmUrl + "/v1/chat/completions",
+                HttpMethod.POST,
+
+                // REQUEST CALLBACK – write JSON body
+                request -> {
+                    request.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                    objectMapper.writeValue(
+                            request.getBody(),
+                            body
+                    );
+                },
+
+                // RESPONSE CALLBACK – stream tokens
+                response -> {
+                    try (Scanner scanner = new Scanner(response.getBody())) {
+                        while (scanner.hasNextLine()) {
+                            String line = scanner.nextLine();
+
+                            // END OF STREAM — MUST BREAK
+                            if (line.contains("[DONE]")) {
+                                break;
+                            }
+
+                            String token = extractToken(line);
+
+                            if (!token.isEmpty()) {
+                                emitter.send(
+                                        SseEmitter.event()
+                                                .name("token")
+                                                .data(token)
+                                );
+                            }
+                        }
+                    }
+                    return null;
+                }
+        );
     }
 
     private HttpHeaders defaultHeaders() {

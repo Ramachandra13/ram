@@ -97,6 +97,118 @@ public class ChatOrchestratorService {
                 emitter.completeWithError(e);
                 return;
             }
+//            emitter.complete();
+            return;
+        }
+
+        watch.start("llm-stream");
+
+        llmClient.streamAnswer(question, context, emitter);
+
+        watch.stop();
+
+        try {
+            emitter.send(
+                    SseEmitter.event()
+                            .name("sources")
+                            .data(buildSources(context))
+            );
+        } catch (Exception e) {
+            emitter.completeWithError(e);
+            return;
+        }
+
+        log.info(watch.prettyPrint());
+//        emitter.complete();
+    }
+
+    private List<ChatResponse.Source> buildSources(
+            List<DocumentChunk> context
+    ) {
+        return context.stream()
+                .map(chunk -> new ChatResponse.Source(
+                        // Required: document identity
+                        (String) chunk.getMetadata().get("document_id"),
+
+                        // Optional but important: page range
+                        (Integer) chunk.getMetadata().get("start_page"),
+                        (Integer) chunk.getMetadata().get("end_page"),
+
+                        // Optional: section / heading info
+                        (String) chunk.getMetadata().get("section_path")
+                ))
+                // Remove duplicate sources caused by multiple chunks
+                .distinct()
+                .toList();
+    }
+
+    public ChatResponse handleUserHybridQuery(String question) {
+
+        log.info("handleUserHybridQuery:: Question received: {}", question);
+
+        StopWatch watch = new StopWatch("RAG Pipeline");
+        watch.start("retrieve-context");
+
+        List<DocumentChunk> context =
+                ragService.retrieveHybridContext(question);
+
+        watch.stop();
+
+        log.info("Retrieved {} context chunks", context.size());
+
+        if (context.isEmpty()) {
+            log.warn("No context found for question");
+
+            return new ChatResponse(
+                    "I don't know based on the provided information.",
+                    List.of()
+            );
+        }
+
+        watch.start("llm-generation");
+
+        String answer =
+                llmClient.generateAnswer(question, context);
+
+        watch.stop();
+
+        List<ChatResponse.Source> sources =
+                buildSources(context);
+
+        log.info(watch.prettyPrint());
+
+        return new ChatResponse(answer, sources);
+    }
+
+    public void streamUserHybridQuery(
+            String question,
+            SseEmitter emitter
+    ) {
+
+        StopWatch watch = new StopWatch("RAG Pipeline Hybrid Search (Streaming)");
+        watch.start("retrieve-context");
+
+        List<DocumentChunk> context =
+                ragService.retrieveHybridContext(question);
+
+        watch.stop();
+
+        log.info("streamUserHybridQuery Retrieved {} context chunks", context.size());
+
+        if (context.isEmpty()) {
+            try {
+                emitter.send(
+                        SseEmitter.event()
+                                .name("final")
+                                .data(new ChatResponse(
+                                        "I don't know based on the provided information.",
+                                        List.of()
+                                ))
+                );
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+                return;
+            }
             emitter.complete();
             return;
         }
@@ -120,25 +232,5 @@ public class ChatOrchestratorService {
 
         log.info(watch.prettyPrint());
         emitter.complete();
-    }
-
-    private List<ChatResponse.Source> buildSources(
-            List<DocumentChunk> context
-    ) {
-        return context.stream()
-                .map(chunk -> new ChatResponse.Source(
-                        // Required: document identity
-                        (String) chunk.getMetadata().get("document_id"),
-
-                        // Optional but important: page range
-                        (Integer) chunk.getMetadata().get("start_page"),
-                        (Integer) chunk.getMetadata().get("end_page"),
-
-                        // Optional: section / heading info
-                        (String) chunk.getMetadata().get("section_path")
-                ))
-                // Remove duplicate sources caused by multiple chunks
-                .distinct()
-                .toList();
     }
 }

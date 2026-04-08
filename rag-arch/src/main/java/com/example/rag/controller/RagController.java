@@ -1,9 +1,11 @@
 package com.example.rag.controller;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import com.example.rag.model.ChatRequest;
 import com.example.rag.model.ChatResponse;
+import com.example.rag.model.DocumentChunk;
 import com.example.rag.orchestrator.ChatOrchestratorService;
 
 import org.slf4j.Logger;
@@ -52,6 +54,35 @@ public class RagController {
             }
         });
 
+        return emitter;
+    }
+
+    @PostMapping("/hybrid/chat")
+    public ChatResponse hybridChat(@RequestBody ChatRequest request) {
+        log.info("hybridChat:: Initiated hybrid chat : ", request.toString());
+
+        String question = request.latestUserQuestion();
+
+        return orchestrator.handleUserHybridQuery(question);
+    }
+
+    @PostMapping(
+            value = "/hybrid/chatstream",
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE
+    )
+    public SseEmitter hybridChatStream(@RequestBody ChatRequest request) {
+
+        SseEmitter emitter = new SseEmitter(0L); // no timeout
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                String question = request.latestUserQuestion();
+                orchestrator.streamUserHybridQuery(question, emitter);
+                emitter.complete();
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+            }
+        });
         return emitter;
     }
 }

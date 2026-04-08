@@ -19,14 +19,18 @@ public class RagService {
     private final VectorStoreClient vectorStore;
     private final RerankerClient reranker;
 
+    private final HybridSearchService hybridSearchService;
+
     public RagService(
             EmbeddingClient embeddingClient,
             VectorStoreClient vectorStore,
-            RerankerClient reranker
+            RerankerClient reranker,
+            HybridSearchService hybridSearchService
     ) {
         this.embeddingClient = embeddingClient;
         this.vectorStore = vectorStore;
         this.reranker = reranker;
+        this.hybridSearchService = hybridSearchService;
     }
 
     public List<DocumentChunk> retrieveContext(String question) {
@@ -61,4 +65,28 @@ public class RagService {
         }
         return reranker_resp;
     }
+
+
+    public List<DocumentChunk> retrieveHybridContext(String question) {
+
+        if (question == null || question.isBlank()) {
+            log.info("Empty query received, skipping retrieval");
+            return List.of();
+        }
+
+        log.info("RagService :: Executing hybrid RAG retrieval");
+
+        List<DocumentChunk> results =
+                hybridSearchService.search(question);
+
+        results.forEach(chunk ->
+                log.info(
+                        "Final Chunk :: id={}, score={}",
+                        chunk.getId(),
+                        chunk.getScore()
+                )
+        );
+        return results;
+    }
+
 }

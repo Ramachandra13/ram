@@ -165,4 +165,13 @@ public class DocumentChunk {
         this.metadata = metadata != null ? metadata : new HashMap<>();
     }
 
+    public DocumentChunk copy() {
+        DocumentChunk copy = new DocumentChunk();
+        copy.setId(this.id);
+        copy.setContent(this.content);
+        copy.setMetadata(this.metadata);
+        copy.setScore(this.score);
+        return copy;
+    }
+
 }
