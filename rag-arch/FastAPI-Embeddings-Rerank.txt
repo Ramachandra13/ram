@@ -1,0 +1,67 @@
+mock_embeddings.py
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import List
+import random
+
+app = FastAPI()
+
+class EmbeddingRequest(BaseModel):
+    texts: List[str]
+
+@app.post("/embed")
+def embed(req: EmbeddingRequest):
+    return {
+        "embeddings": [
+            [random.random() for _ in range(1536)]
+            for _ in req.texts
+        ],
+        "dimensions": 1536
+    }
+
+
+
+app.py
+
+from sentence_transformers import CrossEncoder
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+# Load the CrossEncoder model
+model = CrossEncoder(
+    "C:\\ms-marco-MiniLM-L-6-v2",
+    device="cpu"
+)
+
+app = FastAPI()
+
+class Document(BaseModel):
+    id: str
+    text: str
+
+class RerankRequest(BaseModel):
+    query: str
+    documents: list[Document]
+
+class RerankResult(BaseModel):
+    id: str
+    score: float
+
+@app.post("/rerank")
+async def rerank(req: RerankRequest):
+    """Rerank documents based on relevance to the query."""
+    pairs = [(req.query, doc.text) for doc in req.documents]
+    scores = model.predict(pairs)
+
+    results = [
+        RerankResult(id=doc.id, score=float(score))
+        for doc, score in zip(req.documents, scores)
+    ]
+
+    return {"results": sorted(results, key=lambda x: x.score, reverse=True)}
+
+@app.get("/health")
+async def health():
+    """Health check endpoint."""
+    return {"status": "ok"}
