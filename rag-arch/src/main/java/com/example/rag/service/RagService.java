@@ -52,18 +52,23 @@ public class RagService {
 
         log.info("RagService:: Reranking {} retrieved chunks",
                 retrieved.size());
+        try {
+            List<DocumentChunk> reranker_resp = reranker.rerank(question, retrieved);
 
-        List<DocumentChunk> reranker_resp = reranker.rerank(question, retrieved);
+            for(DocumentChunk reranker_chunk: reranker_resp){
 
-        for(DocumentChunk reranker_chunk: reranker_resp){
+                log.info(
+                        "RagService :: Chunk Score after rerank :: {} :: {}",
+                        reranker_chunk.getId(),
+                        reranker_chunk.getScore()
+                );
+            }
+            return reranker_resp;
 
-            log.info(
-                    "RagService :: Chunk Score after rerank :: {} :: {}",
-                    reranker_chunk.getId(),
-                    reranker_chunk.getScore()
-            );
+        } catch (Exception e) {
+            log.error("Reranking failed, falling back to vector ranking", e);
+            return retrieved;
         }
-        return reranker_resp;
     }
 
 

@@ -1,8 +1,6 @@
 package com.example.rag.service;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -21,20 +19,9 @@ public class RerankerClient {
     private static final Logger log =
             LoggerFactory.getLogger(RerankerClient.class);
 
-//    @Value("${cross.encoder.reranker.url}")
-//    String RERANKER_URL; // local cross-encoder service
     private static final String RERANKER_URL = "http://localhost:8001";
 
     private final RestTemplate restTemplate = new RestTemplate();
-
-
-//    public List<DocumentChunk> rerank(
-//            String query,
-//            List<DocumentChunk> chunks) {
-//
-//        // Call cross-encoder reranker
-//        return chunks;
-//    }
 
     public List<DocumentChunk> rerank(
             String query,
@@ -45,53 +32,80 @@ public class RerankerClient {
             return List.of();
         }
 
-        log.info("RerankerClient :: Sending {} chunks for reranking",
-                chunks.size());
+        log.info("RerankerClient :: Sending {} chunks for reranking", chunks.size());
 
-        // ---- Build request payload ----
-        Map<String, Object> request = Map.of(
-                "query", query,
-                "documents", chunks.stream()
-                        .map(chunk -> Map.of(
-                                "id", chunk.getId(),
-                                "text", chunk.getContent()
-                        ))
-                        .collect(Collectors.toList())
+
+        // ---- Log incoming chunks ----
+        chunks.forEach(chunk ->
+                log.debug("Rerank chunk -> id={}, textPresent={}, score={}",
+                        chunk.getId(),
+                        chunk.getText() != null,
+                        chunk.getScore())
         );
 
+        // ---- Filter invalid chunks ----
+        List<DocumentChunk> validChunks = chunks.stream()
+                .filter(c -> c.getText() != null && !c.getText().isBlank())
+                .toList();
+
+        if (validChunks.isEmpty()) {
+            log.warn("RerankerClient :: No valid chunks after filtering");
+            return chunks;
+        }
+
+        // ---- Build request payload ----
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("query", query);
+
+        List<Map<String, Object>> documents = validChunks.stream()
+                .map(chunk -> {
+                    Map<String, Object> doc = new HashMap<>();
+                    doc.put("id", chunk.getId());
+                    doc.put("text", chunk.getText());
+                    return doc;
+                })
+                .toList();
+
+        request.put("documents", documents);
+
+        log.info("RerankerClient :: Calling reranker at {}", RERANKER_URL);
+
+
         // ---- Call cross-encoder reranker ----
-        log.info("RerankerClient:: Reranker URL", RERANKER_URL);
+        RerankResponse response;
+        try {
+            response = restTemplate.postForObject(
+                    RERANKER_URL + "/rerank",
+                    request,
+                    RerankResponse.class
+            );
+        } catch (Exception ex) {
+            log.error("RerankerClient :: Reranker call failed, returning vector-ranked chunks", ex);
+            return chunks;
+        }
 
-        RerankResponse response =
-                restTemplate.postForObject(
-                        RERANKER_URL+"/rerank",
-                        request,
-                        RerankResponse.class);
-
-        if (response == null || response.getResults() == null) {
+        if (response == null || response.getResults() == null || response.getResults().isEmpty()) {
             log.warn("RerankerClient :: Empty rerank response");
             return chunks;
         }
 
-        // ---- Map scores back to chunks ----
-        Map<String, Double> scoreMap =
-                response.getResults().stream()
-                        .collect(Collectors.toMap(
-                                RerankResult::getId,
-                                RerankResult::getScore
-                        ));
+        // ---- Map rerank scores back to chunks ----
+        Map<String, Double> scoreMap = response.getResults().stream()
+                .collect(Collectors.toMap(
+                        RerankResult::getId,
+                        RerankResult::getScore
+                ));
 
         chunks.forEach(chunk ->
-                chunk.setScore(
-                        scoreMap.getOrDefault(chunk.getId(), 0.0)
-                )
+                chunk.setScore(scoreMap.getOrDefault(chunk.getId(), 0.0))
         );
-        log.info("RerankerClient :: Before send rresponse");
-        // ---- Sort by relevance score ----
+
+        // ---- Sort by rerank score and return top 5 ----
         return chunks.stream()
-                .sorted(Comparator.comparingDouble(
-                        DocumentChunk::getScore).reversed()).limit(5)
-                .collect(Collectors.toList());
+                .sorted(Comparator.comparingDouble(DocumentChunk::getScore).reversed())
+                .limit(5)
+                .toList();
     }
 
 }
