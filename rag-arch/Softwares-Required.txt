@@ -1,0 +1,248 @@
+
+1. Create a Spring Boot application with mvn or gradle
+
+
+2. Install fastapi: This is required for emdeddings.
+
+	Run the below command from Python project VS Code
+
+	pip install fastapi uvicorn --no-warn-script-location
+	
+	python -m uvicorn mock_embeddings:app --port 8000
+	
+	Open Browser:
+		http://127.0.0.1:8000/docs
+		POST http://localhost:8000/embed
+	
+	 Open cmd and run this to set up env settings:
+	 set Path=C:\Users\212154\.local\bin;%Path%
+	 
+	
+3. Install Docker Desktop:  https://docs.docker.com/desktop/setup/install/windows-install/#windows-containers
+
+	This is required to set up Qdrant.
+	Store the chunks at Qdrant.
+	
+	Prerequisites:
+
+		Docker installed
+			
+		docker --version
+		
+		If not installed: https://docs.docker.com/get-docker/
+
+	
+	Setting Up Qdrant Locally (for RAG)
+
+		✅ Recommended Approach: Docker (Fastest & Stable)		
+		
+
+		1. Run Qdrant Using Docker
+
+			docker run -p 6333:6333 -p 6334:6334 \
+			  -v $(pwd)/qdrant_storage:/qdrant/storage \
+			  qdrant/qdrant
+			  
+		docker pull qdrant/qdrant:latest		- This is important to pull qdrant into local
+		
+		docker run -p 6333:6333 -p 6334:6334 -v $(pwd)/qdrant_storage:/qdrant/storage qdrant/qdrant
+		
+
+		Command to run in local: 
+			docker run -p 6333:6333 -p 6334:6334 -v C:/Users/212154/qdrant_storage/qdrant_storage:/qdrant/storage qdrant/qdrant
+
+		----------- ---------------------
+		docker logout
+		Removing login credentials for https://index.docker.io/v1/
+
+		docker login	
+		
+		
+		DOCKER USERNAME: ramachandrarao3
+		--------- ----------------------
+
+		What this does
+			
+			Item				Purpose
+			
+			6333				REST API
+			6334				gRPC API
+			qdrant_storage		Persistent vector data
+			qdrant/qdrant		Official image
+			
+		✅ Qdrant is now running locally.
+
+
+		2. Verify Qdrant Is Running
+
+		Open browser:	http://localhost:6333
+
+		Expected response:
+			
+			{
+			  "title": "qdrant - vector search engine",
+			  "version": "x.y.z"
+			}
+
+		3. Create a Collection for RAG
+			Example: 1536‑dim embeddings (OpenAI / Azure OpenAI)
+			
+			curl -X PUT "http://localhost:6333/collections/rag-documents" \
+			  -H "Content-Type: application/json" \
+			  -d '{
+				"vectors": {
+				  "size": 1536,
+				  "distance": "Cosine"
+				}
+			  }'
+
+			✅ This must match your embedding size
+			
+			
+Use this link to run curl command: https://reqbin.com/curl			
+
+
+		4. Confirm Collection Exists
+
+			curl http://localhost:6333/collections
+
+		You should see:
+
+		{
+		  "result": {
+			"collections": [
+			  { "name": "rag-documents" }
+			]
+		  }
+		}
+
+
+		5. Test Inserting a Vector (Sanity Check)
+
+			curl -X PUT "http://localhost:6333/collections/rag-documents/points?wait=true" \
+			  -H "Content-Type: application/json" \
+			  -d '{
+				"points": [
+				  {
+					"id": "test-1",
+					"vector": [0.01, 0.02, 0.03],
+					"payload": {
+					  "text": "This is a test document",
+					  "source": "manual"
+					}
+				  }
+				]
+			  }'
+
+			✅ Confirms Qdrant is writable
+
+		6. Wire It to Your Spring Boot App
+			
+			application.yml
+			
+			qdrant:
+				url: http://localhost:6333
+				
+			Your VectorStoreClient already matches this ✅
+			
+			
+		7. Test From Your Java RAG App
+			
+			Run:
+				vectorStoreClient.upsert(chunks);
+			
+			Then call:
+				
+				vectorStoreClient.hybridSearch(queryEmbedding, queryText);
+				
+			✅ If results return — RAG retrieval is working.
+
+
+		8. Optional: Enable Web UI (Qdrant Dashboard)
+
+			Qdrant has a simple inspection UI:
+			
+			Visit:	http://localhost:6333/dashboard
+
+			You can:
+				View collections
+				Inspect payloads
+				Debug search results
+	
+	
+	
+Trigger reindex:
+
+	curl -X POST http://localhost:8080/admin/reindex
+	
+	
+From Postman:
+
+http://localhost:8080/rag/chat
+
+Example Request Body:
+
+{
+  "messages": [
+    { "role": "user", "content": "What is Kubernetes?" }
+  ]
+}
+or 
+
+{
+  "messages": [
+    { "role": "user", "content": "What is Kubernetes?" },
+    { "role": "assistant", "content": "Kubernetes is a container orchestration system." },
+    { "role": "user", "content": "Explain services" }
+  ]
+}
+
+Response:
+
+
+  "answer": "Kubernetes Services provide stable networking for pods.",
+  "sources": [
+    {
+      "documentId": "kubernetes-basics.pdf",
+      "startPage": 8,
+      "endPage": 10,
+      "section": "Networking > Services"
+    }
+  ]
+}
+
+
+Steps to FastAPI Cross Encoder for Reranking
+
+	Run the below command from Python project VS Code
+
+	python -m pip install --upgrade pip
+	python -m pip install sentence-transformers torch
+	
+	If see any errors during install, then re run this command 
+	pip install --user sentence-transformers torch fastapi uvicorn
+
+
+	uvicorn app:app --host 0.0.0.0 --port 8001
+	python -m uvicorn app:app --host 0.0.0.0 --port 8001
+	
+	If see errors then download https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2
+
+	Open on browser to test: http://localhost:8001/health
+
+	
+
+Steps to Install Ollama
+
+	Download From: https://ollama.com/download
+	
+	Verify Installation: ollama --version
+	
+	Pull Llama 3 Model: ollama run llama3
+	
+	Verify REST API: http://localhost:11434
+
+	POST /v1/chat/completions
+
+
+
